@@ -177,7 +177,9 @@
 
         // MQTT connection handling
         function connectToMqtt(config) {
+            logDebug('Initializing MQTT connection');
             if (mqttClient && mqttClient.isConnected()) {
+                logDebug('Disconnecting existing MQTT connection');
                 mqttClient.disconnect();
             }
 
@@ -185,7 +187,7 @@
             const host = config.server;
             const port = parseInt(config.port);
             const topic = config.topic;
-
+            logDebug(`Creating new MQTT client with ID: ${clientId}`);
             mqttClient = new Paho.MQTT.Client(host, port, clientId);
 
             mqttClient.onConnectionLost = (responseObject) => {
