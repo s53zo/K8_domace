@@ -109,6 +109,10 @@
     <div class="data-display">
         <h2>Sensor Data</h2>
         <div id="sensor-data"></div>
+        <div class="debug-info">
+            <h3>Debug Information</h3>
+            <pre id="debug-log"></pre>
+        </div>
     </div>
 
     <script src="https://cdnjs.cloudflare.com/ajax/libs/paho-mqtt/1.1.0/paho-mqtt.min.js"></script>
@@ -129,8 +133,10 @@
             mqttPort.value = '';
             mqttTopic.value = '';
             if (mqttClient && mqttClient.isConnected()) {
+                logDebug('Disconnecting from existing MQTT connection');
                 mqttClient.disconnect();
             }
+            logDebug(`Attempting to connect to MQTT broker at ${host}:${port}`);
             updateConnectionStatus();
             sensorData.innerHTML = '<div class="status disconnected">Configuration cleared</div>';
         });
@@ -184,7 +190,9 @@
 
             mqttClient.onConnectionLost = (responseObject) => {
                 if (responseObject.errorCode !== 0) {
-                    console.error('Connection lost:', responseObject.errorMessage);
+                    const msg = `Connection lost: ${responseObject.errorMessage}`;
+                    logDebug(msg);
+                    console.error(msg);
                     sensorData.innerHTML = '<div class="error">Connection lost. Reconnecting...</div>';
                     setTimeout(() => connectToMqtt(config), 5000);
                 }
