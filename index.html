@@ -94,9 +94,14 @@
     
     <div class="config-form">
         <h2>MQTT Configuration</h2>
-        <input type="text" id="mqtt-server" placeholder="MQTT Server (e.g., mqtt.example.com)">
-        <input type="number" id="mqtt-port" placeholder="Port (e.g., 1883)">
-        <input type="text" id="mqtt-topic" placeholder="Topic (e.g., sensors/#)">
+        <input type="text" id="mqtt-server" placeholder="MQTT Server (e.g., mqtt.example.com)" required>
+        <input type="number" id="mqtt-port" placeholder="Port (e.g., 8883)" required min="1" max="65535">
+        <input type="text" id="mqtt-topic" placeholder="Topic (e.g., sensors/#)" required>
+        <input type="text" id="mqtt-username" placeholder="Username">
+        <input type="password" id="mqtt-password" placeholder="Password">
+        <label>
+            <input type="checkbox" id="mqtt-tls" checked> Use TLS/SSL
+        </label>
         <button id="save-config">Save Configuration</button>
         <button id="clear-config" class="clear">Clear Configuration</button>
     </div>
@@ -194,7 +199,10 @@
                 }
             };
 
-            mqttClient.connect({
+            const connectOptions = {
+                userName: config.username || '',
+                password: config.password || '',
+                useSSL: config.useTls,
                 onSuccess: () => {
                     console.log('Connected to MQTT broker');
                     connectionStatus = 'connected';
@@ -207,7 +215,9 @@
                     updateConnectionStatus();
                     setTimeout(() => connectToMqtt(config), 5000);
                 }
-            });
+            };
+            
+            mqttClient.connect(connectOptions);
         }
 
         function displaySensorData(data) {
