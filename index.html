@@ -1,0 +1,224 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>MQTT Sensor Dashboard</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 0;
+            padding: 20px;
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+        .config-form {
+            margin-bottom: 20px;
+            padding: 20px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            background: #f9f9f9;
+        }
+        .config-form input {
+            display: block;
+            margin: 10px 0;
+            padding: 8px;
+            width: 100%;
+            max-width: 400px;
+            box-sizing: border-box;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+        }
+        .config-form input:invalid {
+            border-color: #ff4444;
+        }
+        .config-form button {
+            padding: 8px 16px;
+            margin-right: 10px;
+            background-color: #007bff;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+        }
+        .config-form button.clear {
+            background-color: #dc3545;
+        }
+        .data-display {
+            margin-top: 20px;
+            padding: 20px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            min-height: 200px;
+            background: #f9f9f9;
+        }
+        .data-item {
+            padding: 8px;
+            margin: 4px 0;
+            background: white;
+            border: 1px solid #eee;
+            border-radius: 4px;
+        }
+        .data-key {
+            font-weight: bold;
+            margin-right: 8px;
+        }
+        .status {
+            padding: 8px;
+            margin: 10px 0;
+            border-radius: 4px;
+        }
+        .status.connected {
+            background: #d4edda;
+            color: #155724;
+            border: 1px solid #c3e6cb;
+        }
+        .status.disconnected {
+            background: #f8d7da;
+            color: #721c24;
+            border: 1px solid #f5c6cb;
+        }
+        @media (max-width: 600px) {
+            .config-form, .data-display {
+                padding: 10px;
+            }
+            .config-form button {
+                width: 100%;
+                margin: 5px 0;
+            }
+        }
+    </style>
+</head>
+<body>
+    <h1>MQTT Sensor Dashboard</h1>
+    
+    <div class="config-form">
+        <h2>MQTT Configuration</h2>
+        <input type="text" id="mqtt-server" placeholder="MQTT Server (e.g., mqtt.example.com)">
+        <input type="number" id="mqtt-port" placeholder="Port (e.g., 1883)">
+        <input type="text" id="mqtt-topic" placeholder="Topic (e.g., sensors/#)">
+        <button id="save-config">Save Configuration</button>
+        <button id="clear-config" class="clear">Clear Configuration</button>
+    </div>
+
+    <div class="data-display">
+        <h2>Sensor Data</h2>
+        <div id="sensor-data"></div>
+    </div>
+
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/paho-mqtt/1.1.0/paho-mqtt.min.js"></script>
+    <script>
+        // Configuration handling
+        const configForm = document.getElementById('save-config');
+        const mqttServer = document.getElementById('mqtt-server');
+        const mqttPort = document.getElementById('mqtt-port');
+        const mqttTopic = document.getElementById('mqtt-topic');
+        const sensorData = document.getElementById('sensor-data');
+        let mqttClient = null;
+        let connectionStatus = 'disconnected';
+
+        // Clear configuration
+        document.getElementById('clear-config').addEventListener('click', () => {
+            localStorage.removeItem('mqttConfig');
+            mqttServer.value = '';
+            mqttPort.value = '';
+            mqttTopic.value = '';
+            if (mqttClient && mqttClient.isConnected()) {
+                mqttClient.disconnect();
+            }
+            updateConnectionStatus();
+            sensorData.innerHTML = '<div class="status disconnected">Configuration cleared</div>';
+        });
+
+        function updateConnectionStatus() {
+            const statusDiv = document.createElement('div');
+            statusDiv.className = `status ${connectionStatus}`;
+            statusDiv.textContent = connectionStatus === 'connected' 
+                ? 'Connected to MQTT broker' 
+                : 'Disconnected from MQTT broker';
+            sensorData.prepend(statusDiv);
+        }
+
+        // Load saved configuration
+        if (localStorage.getItem('mqttConfig')) {
+            const config = JSON.parse(localStorage.getItem('mqttConfig'));
+            mqttServer.value = config.server || '';
+            mqttPort.value = config.port || '';
+            mqttTopic.value = config.topic || '';
+            if (config.server && config.port && config.topic) {
+                connectToMqtt(config);
+            }
+        }
+
+        // Save configuration
+        configForm.addEventListener('click', () => {
+            const config = {
+                server: mqttServer.value,
+                port: mqttPort.value,
+                topic: mqttTopic.value
+            };
+            localStorage.setItem('mqttConfig', JSON.stringify(config));
+            alert('Configuration saved!');
+            if (config.server && config.port && config.topic) {
+                connectToMqtt(config);
+            }
+        });
+
+        // MQTT connection handling
+        function connectToMqtt(config) {
+            if (mqttClient && mqttClient.isConnected()) {
+                mqttClient.disconnect();
+            }
+
+            const clientId = 'mqttjs_' + Math.random().toString(16).substr(2, 8);
+            const host = config.server;
+            const port = parseInt(config.port);
+            const topic = config.topic;
+
+            mqttClient = new Paho.MQTT.Client(host, port, clientId);
+
+            mqttClient.onConnectionLost = (responseObject) => {
+                if (responseObject.errorCode !== 0) {
+                    console.error('Connection lost:', responseObject.errorMessage);
+                    sensorData.innerHTML = '<div class="error">Connection lost. Reconnecting...</div>';
+                    setTimeout(() => connectToMqtt(config), 5000);
+                }
+            };
+
+            mqttClient.onMessageArrived = (message) => {
+                try {
+                    const data = JSON.parse(message.payloadString);
+                    displaySensorData(data);
+                } catch (error) {
+                    console.error('Error parsing message:', error);
+                }
+            };
+
+            mqttClient.connect({
+                onSuccess: () => {
+                    console.log('Connected to MQTT broker');
+                    connectionStatus = 'connected';
+                    mqttClient.subscribe(topic, { qos: 0 });
+                    updateConnectionStatus();
+                },
+                onFailure: (err) => {
+                    console.error('Connection failed:', err.errorMessage);
+                    connectionStatus = 'disconnected';
+                    updateConnectionStatus();
+                    setTimeout(() => connectToMqtt(config), 5000);
+                }
+            });
+        }
+
+        function displaySensorData(data) {
+            const dataHtml = Object.entries(data).map(([key, value]) => 
+                `<div class="data-item">
+                    <span class="data-key">${key}:</span>
+                    <span class="data-value">${value}</span>
+                </div>`
+            ).join('');
+            sensorData.innerHTML = dataHtml;
+        }
+    </script>
+</body>
+</html>
